@@ -10,6 +10,6 @@ The screen in the center is the Source, and all smaller screens are Peers. When 
 
 2) When the Source sends this packet, it only does so to 2-3 Peers in that club, putting a low ceiling on its upload bandwidth.
 
-3) The receiving 2-3 Peers in that Club then Scream this new Packet inside that Club, to ensure everyone in the Club gets it.
+3) The receiving 2-3 Peers in that Club then Scream this new Packet to 2-3 other Peers inside that Club. Those 2-3 Peers then Scream the Packet to 2-3 Peers inside that Club, creating a chain reaction, until everyone one in the Club has that Packet.
 
-4) When a peer has no one else to pass the packet to in its own Club, it sends the new Packet to Peers in the other five clubs over a more secure, but slow, protocol.
+4) When a Peer has no one else to Scream the packet to in its own Club, it sends Packets it has received to Peers in the other five clubs over a more secure, but slow, protocol.
