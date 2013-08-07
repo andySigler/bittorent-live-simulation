@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<script type="text/javascript" src="js/packet.js"></script>
+		<script type="text/javascript" src="js/source.js"></script>
+		<script type="text/javascript" src="js/peer.js"></script>
+		<style>
+			body{
+				margin:0px 0px 0px 0px;
+			}
+			canvas{
+				position:absolute
+				left:0px;
+				top:0px;
+			}
+			.interface{
+				position:absolute;
+				top:10px;
+				left:20%;
+			}
+			.range{
+				width:200px;
+				margin-top:5px;
+				margin-right:10px;
+			}
+			strong{
+				color:white;
+			}
+			#colorMarker{
+				position:absolute;
+				left:10px;
+				top:20px;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="colorMarker">
+			<span style="color:green">Download Connections</span><br />
+			<span style="color:orange">Upload Connections</span>
+		</div>
+		<div id="interface" class="interface">
+			<input type="checkbox" id="speed" checked="false"/>Slow-Motion
+			<br />
+			<input type="range" class="range" id="amount" min="0" max="1000" value="0" />Amount
+		</div>
+		<script type="text/javascript">
+
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+
+			var frames = [];
+
+			function makeFrames(){
+				var framesImage = document.createElement('img');
+				framesImage.src = 'images/frames.jpg';
+				framesImage.onload = function(){
+					var xDim = 11;
+					var yDim = 8;
+					var xStep = (framesImage.width/xDim);
+					var yStep = framesImage.height/yDim;
+					for(var x=0;x<xDim;x++){
+						var xPos = x*xStep;
+						for(var y=0;y<yDim;y++){
+							var yPos = y*yStep;
+							var i = x+(y*xDim);
+							frames[i] = document.createElement('canvas');
+							frames[i].width = xStep;
+							frames[i].height = yStep;
+							frames[i].getContext('2d').drawImage(framesImage,xPos,yPos,xStep,yStep,0,0,xStep,yStep);
+						}
+					}
+					document.getElementById('speed').checked = false;
+					makeCanvas();
+					makeSource();
+					masterLoop();
+				}
+			}
+
+			window.onload = init;
+
+			function init(){
+				makeFrames();
+			}
+
+			var mouse = {
+				'x':undefined,
+				'y':undefined,
+				'moved':false
+			};
+
+			window.onmousemove = function(e){
+				if(e.x && e.y){
+					mouse.x=e.x;
+					mouse.y=e.y;
+					mouse.moved=true;
+				}
+				else if(e.clientX & e.clientY){
+					mouse.x=e.clientX;
+					mouse.y=e.clientY;
+					mouse.moved=true;
+				}
+			}
+
+			var winnerClub = -1;
+			var winnerPeer = -1;
+
+			function findHoverPeer(){
+				if(mouse.moved){
+					mouse.moved=false;
+					var closestDist = 99999999;
+					winnerClub = -1;
+					winnerPeer = -1;
+					for(var c=0;c<clubs.length;c++){
+						for(var p=1;p<clubs[c].peers.length;p++){
+							var tp = clubs[c].peers[p];
+							var thisDist = Math.sqrt(Math.pow(mouse.x-tp.x,2)+Math.pow(mouse.y-tp.y,2));
+							if(thisDist<frames[0].width*clubs[c].peers[p].scale*.5 && thisDist<closestDist){
+								closestDist=thisDist;
+								winnerClub = c;
+								winnerPeer = p;
+							}
+						}
+					}
+				}
+				if(clubs[winnerClub] && clubs[winnerClub].peers[winnerPeer]){
+					clubs[winnerClub].peers[winnerPeer].paint_connections();
+				}
+			}
+
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+
+			var maxPeers = 6*20;
+			var minPeers = 1;
+			var peerAmount = minPeers;
+
+			var slider = {
+				'one':undefined,
+				'two':undefined
+			};
+
+			function updateInterface(){
+				var slowMo = document.getElementById('speed').checked;
+				if(slowMo){
+					if(slider.one===0){
+						capsules = [];
+					}
+					slider.one = 1;
+				}
+				else{
+					slider.one = 0;
+				}
+
+				slider.two = document.getElementById('amount').value/1000;
+
+				peerAmount = Math.floor(Math.pow(slider.two,2)*maxPeers+minPeers);
+				source.loopInterval = Math.floor(Math.pow(slider.one,2)*source.maxLoopInterval)+source.minLoopInterval;
+				if(source.loopInterval<source.minLoopInterval || !source.loopInterval){
+					source.loopInterval = source.minLoopInterval;
+				}
+
+				animationSlide = (1-slider.one)*10+1;
+			};
+
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+
+			var capsules = [];
+
+			var animationSlide = 1;
+
+			function masterLoop(){
+
+				context.clearRect(0,0,canvas.width,canvas.height);
+
+				checkPeerAmount();
+
+				updateInterface();
+
+				//update everyone's connections
+				source.checkConnections();
+				for(var c=0;c<clubs.length;c++){
+					for(var p=1;p<clubs[c].peers.length;p++){
+						clubs[c].peers[p].checkConnections();
+					}
+				}
+
+				//send packets!!
+				source.updatePacket();
+				for(var c=0;c<clubs.length;c++){
+					for(var p=1;p<clubs[c].peers.length;p++){
+						clubs[c].peers[p].updatePacket();
+					}
+				}
+
+				source.paint_connections();
+
+				//draw the capsules
+				for(var i=0;i<capsules.length;i++){
+					capsules[i].update();
+					if(capsules[i].done){
+						capsules.splice(i,1);
+						i--;
+					}
+					else{
+						capsules[i].paint();
+					}
+				}
+
+				//draw the bodies
+				source.paint_body();
+				for(var c=0;c<clubs.length;c++){
+					for(var p=1;p<clubs[c].peers.length;p++){
+						clubs[c].peers[p].animate(animationSlide);
+					}
+				}
+
+				findHoverPeer();
+
+				requestAnimFrame(masterLoop);
+			}
+
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+
+			function checkPeerAmount(){
+				var changed = false;
+				while(peerAmount>totalPeers){
+					addPeer();
+					changed=true;
+				}
+				while(peerAmount<totalPeers){
+					removePeer();
+					changed=true;
+				}
+				if(changed){
+					for(var i=0;i<clubs.length;i++){
+						clubs[i].updateCoordinates(10,i);
+					}
+				}
+			}
+
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+
+			var clubs = [];
+			var totalPeers = 0;
+
+			function addPeer(){
+
+				var thisClub = totalPeers%6;
+				if(!clubs[thisClub]){
+					clubs[thisClub] = {
+						'peers':[],
+						'updateCoordinates': updateClubCoordinates,
+						'center':{
+							'x': ((thisClub%3)*canvas.width/3)+(canvas.width/6),
+							'y': ((thisClub%2)*canvas.height/2)+(canvas.height/4)
+						}
+					};
+					clubs[thisClub].peers.push(source);
+				}
+
+				var tempFrameCount = Math.abs(source.packetCount-12);
+
+				var thisID = clubs[thisClub].peers.length;
+				var newPeer = new Peer(thisID,thisClub,tempFrameCount);
+
+				clubs[thisClub].peers.push(newPeer);
+
+				totalPeers++;
+			}
+
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+
+			function removePeer(){
+
+				totalPeers--;
+
+				var thisClub = totalPeers%6;
+
+				clubs[thisClub].peers.splice(clubs[thisClub].peers.length-1,1);
+
+				if(clubs[thisClub].peers.length<=1){
+					clubs.splice(thisClub,1);
+				}
+			}
+
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+
+			function updateClubCoordinates(peerSpace,thisClub){
+				var rightSin = Math.sin(Math.PI*.5);
+
+				var total = this.peers.length-1;
+				var angle = (Math.PI*2)/total;
+
+				var thisSpace = peerSpace*(this.peers.length*.5);
+
+				var centerX = this.center.x;
+				var centerY = this.center.y;
+
+				for(var i=1;i<this.peers.length;i++){
+
+					var totalRot = i*angle;
+
+					var tempRot = totalRot%(Math.PI*.5);
+					var thirdAngle = Math.PI-(Math.PI*.5+tempRot);
+
+					var sinValue_given = thisSpace/rightSin;
+
+					var xDist = 0;
+					var yDist = 0;
+
+					//depending on the direction...
+					var whatDirection = Math.floor(totalRot/(Math.PI*.5));
+
+					if(whatDirection===0){      
+						xDist = sinValue_given*Math.sin(tempRot);
+						yDist = sinValue_given*Math.sin(thirdAngle);
+					}
+					else if(whatDirection===1){      
+						xDist = sinValue_given*Math.sin(thirdAngle);
+						yDist = sinValue_given*Math.sin(tempRot)*-1;
+					}
+					else if(whatDirection===2){      
+						xDist = sinValue_given*Math.sin(tempRot)*-1;
+						yDist = sinValue_given*Math.sin(thirdAngle)*-1;
+					}
+					else if(whatDirection===3){      
+						xDist = sinValue_given*Math.sin(thirdAngle)*-1;
+						yDist = sinValue_given*Math.sin(tempRot);
+					}
+
+					if(xDist===0 && yDist===0 && this.peers.length>2) yDist = thisSpace;
+
+					this.peers[i].x = centerX+xDist;
+					this.peers[i].y = centerY+yDist;
+				}
+			}
+
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+
+			var source;
+
+			function makeSource(){
+				source = new Source(canvas.width/2,canvas.height/2);
+			}
+
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+
+			var canvas,context;
+
+			function makeCanvas(){
+				canvas = document.createElement('canvas');
+				canvas.width = window.innerWidth;
+				canvas.height = window.innerHeight;
+				context = canvas.getContext('2d');
+				document.body.appendChild(canvas);
+			}
+
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+
+			window.requestAnimFrame = (function(){
+				return  window.requestAnimationFrame||window.webkitRequestAnimationFrame ||
+					window.mozRequestAnimationFrame||function(callback){
+						window.setTimeout(callback, 1000 / 60);
+					};
+			})();
+
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+			/////////////////////////////////////////////
+
+		</script>
+	</body>
+</html>
