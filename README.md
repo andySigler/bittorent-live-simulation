@@ -4,6 +4,8 @@
 
 The screen in the center is the Source, and all smaller screens are Peers. When a new Peer is added, it joins one of the six Clubs.
 
+The larger Red dots represent Packets sent over a Screamer Protocol, while the smaller Black dots represent packets being sent between different Clubs over a more secure/slow protocol.
+
 ###Life of a Packet:
 
 1) The Source creates a new packet, and sends that packet to only one of the clubs over a Screamer Protocol (fast/unreliable).
